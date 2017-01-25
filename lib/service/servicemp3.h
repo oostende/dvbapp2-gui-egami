@@ -82,20 +82,47 @@ public:
 
 	double getDouble(unsigned int index) const;
 	unsigned char *getBuffer(unsigned int &size) const;
-
 	void setDouble(double value);
 	void setBuffer(GstBuffer *buffer);
+};
+
+class GstMessageContainer: public iObject
+{
+	DECLARE_REF(GstMessageContainer);
+	GstMessage *messagePointer;
+	GstPad *messagePad;
+	GstBuffer *messageBuffer;
+	int messageType;
+
+public:
+	GstMessageContainer(int type, GstMessage *msg, GstPad *pad, GstBuffer *buffer)
+	{
+		messagePointer = msg;
+		messagePad = pad;
+		messageBuffer = buffer;
+		messageType = type;
+	}
+	~GstMessageContainer()
+	{
+		if (messagePointer) gst_message_unref(messagePointer);
+		if (messagePad) gst_object_unref(messagePad);
+		if (messageBuffer) gst_buffer_unref(messageBuffer);
+	}
+	int getType() { return messageType; }
+	operator GstMessage *() { return messagePointer; }
+	operator GstPad *() { return messagePad; }
+	operator GstBuffer *() { return messageBuffer; }
 };
 
 typedef struct _GstElement GstElement;
 
 typedef enum { atUnknown, atMPEG, atMP3, atAC3, atDTS, atAAC, atPCM, atOGG, atFLAC, atWMA } audiotype_t;
 typedef enum { stUnknown, stPlainText, stSSA, stASS, stSRT, stVOB, stPGS } subtype_t;
-typedef enum { ctNone, ctMPEGTS, ctMPEGPS, ctMKV, ctAVI, ctMP4, ctVCD, ctCDA, ctASF, ctOGG } containertype_t;
+typedef enum { ctNone, ctMPEGTS, ctMPEGPS, ctMKV, ctAVI, ctMP4, ctVCD, ctCDA, ctASF, ctOGG, ctWEBM } containertype_t;
 
 class eServiceMP3: public iPlayableService, public iPauseableService,
 	public iServiceInformation, public iSeekableService, public iAudioTrackSelection, public iAudioChannelSelection,
-	public iSubtitleOutput, public iStreamedService, public iAudioDelay, public Object
+	public iSubtitleOutput, public iStreamedService, public iAudioDelay, public Object, public iCueSheet
 {
 	DECLARE_REF(eServiceMP3);
 public:
@@ -116,12 +143,18 @@ public:
 	RESULT audioChannel(ePtr<iAudioChannelSelection> &ptr);
 	RESULT subtitle(ePtr<iSubtitleOutput> &ptr);
 	RESULT audioDelay(ePtr<iAudioDelay> &ptr);
+	RESULT cueSheet(ePtr<iCueSheet> &ptr);
 
 		// not implemented (yet)
 	RESULT frontendInfo(ePtr<iFrontendInformation> &ptr) { ptr = 0; return -1; }
 	RESULT subServices(ePtr<iSubserviceList> &ptr) { ptr = 0; return -1; }
 	RESULT timeshift(ePtr<iTimeshiftService> &ptr) { ptr = 0; return -1; }
-	RESULT cueSheet(ePtr<iCueSheet> &ptr) { ptr = 0; return -1; }
+//	RESULT cueSheet(ePtr<iCueSheet> &ptr) { ptr = 0; return -1; }
+
+		// iCueSheet
+	PyObject *getCutList();
+	void setCutList(SWIG_PYOBJECT(ePyObject));
+	void setCutListEnable(int enable);
 
 	RESULT rdsDecoder(ePtr<iRdsDecoder> &ptr) { ptr = 0; return -1; }
 	RESULT keys(ePtr<iServiceKeys> &ptr) { ptr = 0; return -1; }
@@ -174,6 +207,11 @@ public:
 	int getPCMDelay();
 	void setAC3Delay(int);
 	void setPCMDelay(int);
+
+#if HAVE_AMLOGIC
+	void AmlSwitchAudio(int index);
+	unsigned int get_pts_pcrscr(void);
+#endif
 
 	struct audioStream
 	{
@@ -229,6 +267,26 @@ protected:
 	ePtr<eServiceEvent> m_event_now, m_event_next;
 	void updateEpgCacheNowNext();
 
+		/* cuesheet */
+	struct cueEntry
+	{
+		pts_t where;
+		unsigned int what;
+
+		bool operator < (const struct cueEntry &o) const
+		{
+			return where < o.where;
+		}
+		cueEntry(const pts_t &where, unsigned int what) :
+			where(where), what(what)
+		{
+		}
+	};
+
+	std::multiset<cueEntry> m_cue_entries;
+	int m_cuesheet_changed, m_cutlist_enabled;
+	void loadCuesheet();
+	void saveCuesheet();
 private:
 	static int pcm_delay;
 	static int ac3_delay;
@@ -245,7 +303,17 @@ private:
 	int m_buffer_size;
 	int m_ignore_buffering_messages;
 	bool m_is_live;
+	bool m_subtitles_paused;
 	bool m_use_prefillbuffer;
+	bool m_paused;
+	/* cuesheet load check */
+	bool m_cuesheet_loaded;
+	/* servicemMP3 chapter TOC support CVR */
+#if GST_VERSION_MAJOR >= 1
+	bool m_use_chapter_entries;
+	/* last used seek position gst-1 only */
+	gint64 m_last_seek_pos;
+#endif
 	bufferInfo m_bufferInfo;
 	errorInfo m_errorInfo;
 	std::string m_download_buffer_path;
@@ -259,33 +327,6 @@ private:
 	GstElement *m_gst_playbin, *audioSink, *videoSink;
 	GstTagList *m_stream_tags;
 
-	class GstMessageContainer: public iObject
-	{
-		DECLARE_REF(GstMessageContainer);
-		GstMessage *messagePointer;
-		GstPad *messagePad;
-		GstBuffer *messageBuffer;
-		int messageType;
-
-	public:
-		GstMessageContainer(int type, GstMessage *msg, GstPad *pad, GstBuffer *buffer)
-		{
-			messagePointer = msg;
-			messagePad = pad;
-			messageBuffer = buffer;
-			messageType = type;
-		}
-		~GstMessageContainer()
-		{
-			if (messagePointer) gst_message_unref(messagePointer);
-			if (messagePad) gst_object_unref(messagePad);
-			if (messageBuffer) gst_buffer_unref(messageBuffer);
-		}
-		int getType() { return messageType; }
-		operator GstMessage *() { return messagePointer; }
-		operator GstPad *() { return messagePad; }
-		operator GstBuffer *() { return messageBuffer; }
-	};
 	eFixedMessagePump<ePtr<GstMessageContainer> > m_pump;
 
 	audiotype_t gstCheckAudioPad(GstStructure* structure);
@@ -298,7 +339,13 @@ private:
 	GstPad* gstCreateSubtitleSink(eServiceMP3* _this, subtype_t type);
 	void gstPoll(ePtr<GstMessageContainer> const &);
 	static void playbinNotifySource(GObject *object, GParamSpec *unused, gpointer user_data);
+#if GST_VERSION_MAJOR < 1
 	static gint match_sinktype(GstElement *element, gpointer type);
+#else
+/* TOC processing CVR */
+	void HandleTocEntry(GstMessage *msg);
+	static gint match_sinktype(const GValue *velement, const gchar *type);
+#endif
 	static void handleElementAdded(GstBin *bin, GstElement *element, gpointer user_data);
 
 	struct subtitle_page_t
@@ -318,7 +365,6 @@ private:
 	subtitle_pages_map_t m_subtitle_pages;
 	ePtr<eTimer> m_subtitle_sync_timer;
 
-	ePtr<eTimer> m_streamingsrc_timeout;
 	pts_t m_prev_decoder_time;
 	int m_decoder_time_valid_state;
 

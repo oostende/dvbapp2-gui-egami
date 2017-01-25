@@ -48,7 +48,7 @@ bool eServiceEvent::loadLanguage(Event *evt, const std::string &lang, int tsidon
 				{
 					/* stick to this language, avoid merging or mixing descriptors of different languages */
 					language = cc;
-					m_event_name += replace_all(replace_all(convertDVBUTF8(sed->getEventName(), table, tsidonid), "\n", " "), "\t", " ");
+					m_event_name += replace_all(replace_all(convertDVBUTF8(sed->getEventName(), table, tsidonid), "\n", " ",table), "\t", " ",table);
 					m_short_description += convertDVBUTF8(sed->getText(), table, tsidonid);
 					retval=1;
 				}
@@ -171,23 +171,13 @@ bool eServiceEvent::loadLanguage(Event *evt, const std::string &lang, int tsidon
 
 RESULT eServiceEvent::parseFrom(Event *evt, int tsidonid)
 {
-	uint16_t stime_mjd = evt->getStartTimeMjd();
-	uint32_t stime_bcd = evt->getStartTimeBcd();
-	uint32_t duration = evt->getDuration();
-	m_begin = parseDVBtime(
-		stime_mjd >> 8,
-		stime_mjd&0xFF,
-		stime_bcd >> 16,
-		(stime_bcd >> 8)&0xFF,
-		stime_bcd & 0xFF
-	);
+	m_begin = parseDVBtime(evt->getStartTimeMjd(), evt->getStartTimeBcd());
 	m_event_id = evt->getEventId();
+	uint32_t duration = evt->getDuration();
 	m_duration = fromBCD(duration>>16)*3600+fromBCD(duration>>8)*60+fromBCD(duration);
 	if (m_language != "---" && loadLanguage(evt, m_language, tsidonid))
 		return 0;
 	if (m_language_alternative != "---" && loadLanguage(evt, m_language_alternative, tsidonid))
-		return 0;
-	if (loadLanguage(evt, "eng", tsidonid))
 		return 0;
 	if (loadLanguage(evt, "---", tsidonid))
 		return 0;
@@ -201,7 +191,7 @@ RESULT eServiceEvent::parseFrom(const std::string& filename, int tsidonid)
 		int fd = ::open( filename.c_str(), O_RDONLY );
 		if ( fd > -1 )
 		{
-			__u8 buf[4096];
+			uint8_t buf[4096];
 			int rd = ::read(fd, buf, 4096);
 			::close(fd);
 			if ( rd > 12 /*EIT_LOOP_SIZE*/ )
