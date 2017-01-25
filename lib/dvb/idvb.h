@@ -4,6 +4,7 @@
 #ifndef SWIG
 
 #include <linux/dvb/frontend.h>
+#include <linux/dvb/version.h>
 #include <linux/dvb/video.h>
 #include <lib/base/object.h>
 #include <lib/base/ebase.h>
@@ -23,8 +24,9 @@ struct eDVBSectionFilterMask
 {
 	int pid;
 		/* mode is 0 for positive, 1 for negative filtering */
-	__u8 data[DMX_FILTER_SIZE], mask[DMX_FILTER_SIZE], mode[DMX_FILTER_SIZE];
-	enum {
+	uint8_t data[DMX_FILTER_SIZE], mask[DMX_FILTER_SIZE], mode[DMX_FILTER_SIZE];
+	enum
+	{
 		rfCRC=1,
 		rfNoAbort=2
 	};
@@ -38,20 +40,20 @@ struct eDVBTableSpec
 	int timeout;        /* timeout in ms */
 	enum
 	{
-		tfInOrder=1,
+		tfInOrder		= 1,
 		/*
 			tfAnyVersion      filter ANY version
 			0                 filter all EXCEPT given version (negative filtering)
 			tfThisVersion     filter only THIS version
 		*/
-		tfAnyVersion=2,
-		tfThisVersion=4,
-		tfHaveTID=8,
-		tfHaveTIDExt=16,
-		tfCheckCRC=32,
-		tfHaveTimeout=64,
-		tfHaveTIDMask=128,
-		tfHaveTIDExtMask=256
+		tfAnyVersion	= 2,
+		tfThisVersion	= 4,
+		tfHaveTID		= 8,
+		tfHaveTIDExt	= 16,
+		tfCheckCRC		= 32,
+		tfHaveTimeout	= 64,
+		tfHaveTIDMask	= 128,
+		tfHaveTIDExtMask= 256
 	};
 	int flags;
 };
@@ -65,20 +67,20 @@ struct eBouquet
 // the following five methods are implemented in db.cpp
 	RESULT flushChanges();
 	RESULT addService(const eServiceReference &, eServiceReference before=eServiceReference());
-	RESULT removeService(const eServiceReference &);
+	RESULT removeService(const eServiceReference &, bool renameBouquet=true);
 	RESULT moveService(const eServiceReference &, unsigned int);
 	RESULT setListName(const std::string &name);
 };
 
-		/* these structures have by intention no operator int() defined.
-		   the reason of these structures is to avoid mixing for example
-		   a onid and a tsid (as there's no general order for them).
+/* these structures have by intention no operator int() defined.
+	the reason of these structures is to avoid mixing for example
+	a onid and a tsid (as there's no general order for them).
 
-		   defining an operator int() would implicitely convert values
-		   between them over the constructor with the int argument.
+	defining an operator int() would implicitely convert values
+	between them over the constructor with the int argument.
 
-		   'explicit' doesn't here - eTransportStreamID(eOriginalNetworkID(n))
-		   would still work. */
+	'explicit' doesn't here - eTransportStreamID(eOriginalNetworkID(n))
+	would still work. */
 
 struct eTransportStreamID
 {
@@ -177,13 +179,21 @@ struct eDVBChannelID
 	}
 };
 
-struct eServiceReferenceDVB: public eServiceReference
+class eServiceReferenceDVB: public eServiceReference
 {
-	int getServiceType() const { return data[0]; }
-	void setServiceType(int service_type) { data[0]=service_type; }
+public:
+	enum service_ref
+	{
+		ref_service_type= 0,
+		ref_service_id	= 1,
 
-	eServiceID getServiceID() const { return eServiceID(data[1]); }
-	void setServiceID(eServiceID service_id) { data[1]=service_id.get(); }
+	};
+
+	int getServiceType() const { return data[ref_service_type]; }
+	void setServiceType(int service_type) { data[ref_service_type]=service_type; }
+
+	eServiceID getServiceID() const { return eServiceID(data[ref_service_id]); }
+	void setServiceID(eServiceID service_id) { data[ref_service_id]=service_id.get(); }
 
 	eTransportStreamID getTransportStreamID() const { return eTransportStreamID(data[2]); }
 	void setTransportStreamID(eTransportStreamID transport_stream_id) { data[2]=transport_stream_id.get(); }
@@ -289,10 +299,12 @@ public:
 		dxNoDVB=4,  // dont use PMT for this service ( use cached pids )
 		dxHoldName=8,
 		dxNewFound=64,
+		dxIsDedicated3D=128,
 	};
 
 	bool usePMT() const { return !(m_flags & dxNoDVB); }
 	bool isHidden() const { return m_flags & dxDontshow; }
+	bool isDedicated3D() const { return m_flags & dxIsDedicated3D; }
 
 	CAID_LIST m_ca;
 
@@ -393,8 +405,10 @@ class eDVBFrontendParametersATSC;
 class iDVBFrontendParameters: public iObject
 {
 #ifdef SWIG
+public:
 	iDVBFrontendParameters();
 	~iDVBFrontendParameters();
+private:
 #endif
 public:
 	enum { flagOnlyFree = 1 };
@@ -420,7 +434,7 @@ class eDVBDiseqcCommand
 public:
 #endif
 	int len;
-	__u8 data[MAX_DISEQC_LENGTH];
+	uint8_t data[MAX_DISEQC_LENGTH];
 #ifdef SWIG
 public:
 #endif
@@ -437,6 +451,7 @@ class iDVBFrontend_ENUMS
 	~iDVBFrontend_ENUMS();
 #endif
 public:
+	enum { dvb_api_version = DVB_API_VERSION };
 	enum { feSatellite, feCable, feTerrestrial, feATSC };
 	enum { stateIdle, stateTuning, stateFailed, stateLock, stateLostLock, stateClosed };
 	enum { toneOff, toneOn };
@@ -461,8 +476,8 @@ class iDVBTransponderData: public iObject
 public:
 	virtual std::string getTunerType() const = 0;
 	virtual int getInversion() const = 0;
-	virtual unsigned int getFrequency() const = 0;
-	virtual unsigned int getSymbolRate() const = 0;
+	virtual int getFrequency() const = 0;
+	virtual int getSymbolRate() const = 0;
 	virtual int getOrbitalPosition() const = 0;
 	virtual int getFecInner() const = 0;
 	virtual int getModulation() const = 0;
@@ -504,17 +519,21 @@ public:
 #ifndef SWIG
 	virtual RESULT setSEC(iDVBSatelliteEquipmentControl *sec)=0;
 	virtual RESULT setSecSequence(eSecCommandList &list)=0;
+	virtual RESULT setSecSequence(eSecCommandList &list, iDVBFrontend *fe)=0;
 #endif
 	virtual int readFrontendData(int type)=0;
 	virtual void getFrontendStatus(ePtr<iDVBFrontendStatus> &dest)=0;
 	virtual void getTransponderData(ePtr<iDVBTransponderData> &dest, bool original)=0;
 	virtual void getFrontendData(ePtr<iDVBFrontendData> &dest)=0;
 #ifndef SWIG
+	virtual int getDVBID() = 0;
 	virtual RESULT getData(int num, long &data)=0;
 	virtual RESULT setData(int num, long val)=0;
 		/* 0 means: not compatible. other values are a priority. */
 	virtual int isCompatibleWith(ePtr<iDVBFrontendParameters> &feparm)=0;
 #endif
+	virtual bool changeType(int type)=0;
+
 };
 SWIG_TEMPLATE_TYPEDEF(ePtr<iDVBFrontend>, iDVBFrontendPtr);
 
@@ -523,7 +542,7 @@ class iDVBSatelliteEquipmentControl: public iObject
 {
 public:
 	virtual RESULT prepare(iDVBFrontend &frontend, const eDVBFrontendParametersSatellite &sat, int &frequency, int frontend_id, unsigned int timeout)=0;
-	virtual void prepareTurnOffSatCR(iDVBFrontend &frontend, int satcr)=0;
+	virtual void prepareTurnOffSatCR(iDVBFrontend &frontend)=0;
 	virtual int canTune(const eDVBFrontendParametersSatellite &feparm, iDVBFrontend *fe, int frontend_id, int *highest_score_lnb=0)=0;
 	virtual void setRotorMoving(int slotid, bool)=0;
 };

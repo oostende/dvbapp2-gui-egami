@@ -6,7 +6,9 @@
 #include <signal.h>
 #include <sys/sysinfo.h>
 #include <sys/mman.h>
-
+#ifdef HAVE_AMLOGIC
+#include <lib/dvb/amldecoder.h>
+#endif
 //#define SHOW_WRITE_TIME
 static int determineBufferCount()
 {
@@ -44,6 +46,9 @@ eDVBDemux::eDVBDemux(int adapter, int demux):
 	adapter(adapter),
 	demux(demux),
 	source(-1),
+#ifdef HAVE_AMLOGIC
+	m_pvr_fd(-1),
+#endif
 	m_dvr_busy(0)
 {
 }
@@ -56,7 +61,7 @@ int eDVBDemux::openDemux(void)
 {
 	char filename[32];
 	snprintf(filename, sizeof(filename), "/dev/dvb/adapter%d/demux%d", adapter, demux);
-	return ::open(filename, O_RDWR);
+	return ::open(filename, O_RDWR | O_CLOEXEC);
 }
 
 int eDVBDemux::openDVR(int flags)
@@ -66,7 +71,12 @@ int eDVBDemux::openDVR(int flags)
 #else
 	char filename[32];
 	snprintf(filename, sizeof(filename), "/dev/dvb/adapter%d/dvr%d", adapter, demux);
+#if HAVE_AMLOGIC
+	m_pvr_fd =  ::open(filename, flags);
+	return m_pvr_fd;
+#else
 	return ::open(filename, flags);
+#endif
 #endif
 }
 
@@ -79,7 +89,16 @@ RESULT eDVBDemux::setSourceFrontend(int fenum)
 	int n = DMX_SOURCE_FRONT0 + fenum;
 	int res = ::ioctl(fd, DMX_SET_SOURCE, &n);
 	if (res)
+	{
 		eDebug("DMX_SET_SOURCE failed! - %m");
+#if HAVE_AMLOGIC
+		/** FIXME: gg begin dirty hack  */
+		eDebug("Ignoring due to limitation to one frontend for each adapter and missing ioctl....");
+		source = fenum;
+		res = 0;
+		/** FIXME: gg end dirty hack  */
+#endif
+	}
 	else
 		source = fenum;
 	::close(fd);
@@ -125,7 +144,11 @@ RESULT eDVBDemux::createTSRecorder(ePtr<iDVBTSRecorder> &recorder, int packetsiz
 
 RESULT eDVBDemux::getMPEGDecoder(ePtr<iTSMPEGDecoder> &decoder, int index)
 {
+#ifdef HAVE_AMLOGIC
+	decoder = new eAMLTSMPEGDecoder(this, index);
+#else
 	decoder = new eTSMPEGDecoder(this, index);
+#endif
 	return 0;
 }
 
@@ -171,7 +194,7 @@ RESULT eDVBDemux::connectEvent(const Slot1<void,int> &event, ePtr<eConnection> &
 
 void eDVBSectionReader::data(int)
 {
-	__u8 data[4096]; // max. section size
+	uint8_t data[4096]; // max. section size
 	int r;
 	r = ::read(fd, data, 4096);
 	if(r < 0)
@@ -236,6 +259,7 @@ RESULT eDVBSectionReader::start(const eDVBSectionFilterMask &mask)
 	notifier->start();
 
 	dmx_sct_filter_params sct;
+	memset(&sct, 0, sizeof(sct));
 	sct.pid     = mask.pid;
 	sct.timeout = 0;
 	sct.flags   = DMX_IMMEDIATE_START;
@@ -272,7 +296,7 @@ RESULT eDVBSectionReader::stop()
 	return 0;
 }
 
-RESULT eDVBSectionReader::connectRead(const Slot1<void,const __u8*> &r, ePtr<eConnection> &conn)
+RESULT eDVBSectionReader::connectRead(const Slot1<void,const uint8_t*> &r, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, read.connect(r));
 	return 0;
@@ -282,7 +306,7 @@ void eDVBPESReader::data(int)
 {
 	while (1)
 	{
-		__u8 buffer[16384];
+		uint8_t buffer[16384];
 		int r;
 		r = ::read(m_fd, buffer, 16384);
 		if (!r)
@@ -346,6 +370,8 @@ RESULT eDVBPESReader::start(int pid)
 	m_notifier->start();
 
 	dmx_pes_filter_params flt;
+	memset(&flt, 0, sizeof(flt));
+
 	flt.pes_type = DMX_PES_OTHER;
 	flt.pid     = pid;
 	flt.input   = DMX_IN_FRONTEND;
@@ -374,7 +400,7 @@ RESULT eDVBPESReader::stop()
 	return 0;
 }
 
-RESULT eDVBPESReader::connectRead(const Slot2<void,const __u8*,int> &r, ePtr<eConnection> &conn)
+RESULT eDVBPESReader::connectRead(const Slot2<void,const uint8_t*,int> &r, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, m_read.connect(r));
 	return 0;
@@ -594,6 +620,13 @@ void eDVBRecordFileThread::flush()
 	}
 }
 
+eDVBRecordStreamThread::eDVBRecordStreamThread(int packetsize) :
+	eDVBRecordFileThread(packetsize, recordingBufferCount)
+{
+	eDebug("[eDVBRecordStreamThread] allocated %d buffers of %d kB", m_aio.size(), m_buffersize>>10);
+}
+
+
 int eDVBRecordStreamThread::writeData(int len)
 {
 	len = asyncWrite(len);
@@ -690,7 +723,7 @@ RESULT eDVBTSRecorder::start()
 	char filename[128];
 	snprintf(filename, 128, "/dev/dvb/adapter%d/demux%d", m_demux->adapter, m_demux->demux);
 
-	m_source_fd = ::open(filename, O_RDONLY);
+	m_source_fd = ::open(filename, O_RDONLY | O_CLOEXEC);
 
 	if (m_source_fd < 0)
 	{
@@ -701,6 +734,8 @@ RESULT eDVBTSRecorder::start()
 	setBufferSize(1024*1024);
 
 	dmx_pes_filter_params flt;
+	memset(&flt, 0, sizeof(flt));
+
 	flt.pes_type = DMX_PES_OTHER;
 	flt.output  = DMX_OUT_TSDEMUX_TAP;
 	flt.pid     = i->first;
@@ -864,7 +899,8 @@ RESULT eDVBTSRecorder::connectEvent(const Slot1<void,int> &event, ePtr<eConnecti
 RESULT eDVBTSRecorder::startPID(int pid)
 {
 	while(true) {
-		__u16 p = pid;
+		uint16_t p = pid;
+		eDebug("[adenin]add PID %d(0x%04x)", p, p);
 		if (::ioctl(m_source_fd, DMX_ADD_PID, &p) < 0) {
 			perror("DMX_ADD_PID");
 			if (errno == EAGAIN || errno == EINTR) {
@@ -883,7 +919,8 @@ void eDVBTSRecorder::stopPID(int pid)
 	if (m_pids[pid] != -1)
 	{
 		while(true) {
-			__u16 p = pid;
+			uint16_t p = pid;
+			eDebug("[adenin]rmove PID %d(0x%04x)", p, p);
 			if (::ioctl(m_source_fd, DMX_REMOVE_PID, &p) < 0) {
 				perror("DMX_REMOVE_PID");
 				if (errno == EAGAIN || errno == EINTR) {

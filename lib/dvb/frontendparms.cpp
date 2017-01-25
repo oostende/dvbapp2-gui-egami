@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <ansidebug.h>
 
 
 DEFINE_REF(eDVBFrontendStatus);
@@ -113,12 +114,12 @@ int eDVBTransponderData::getInversion() const
 	return -1;
 }
 
-unsigned int eDVBTransponderData::getFrequency() const
+int eDVBTransponderData::getFrequency() const
 {
 	return 0;
 }
 
-unsigned int eDVBTransponderData::getSymbolRate() const
+int eDVBTransponderData::getSymbolRate() const
 {
 	return 0;
 }
@@ -200,8 +201,8 @@ int eDVBTransponderData::getPlpId() const
 
 DEFINE_REF(eDVBSatelliteTransponderData);
 
-eDVBSatelliteTransponderData::eDVBSatelliteTransponderData(struct dtv_property *dtvproperties, unsigned int propertycount, eDVBFrontendParametersSatellite &transponderparms, int frequencyoffset, bool original)
-: eDVBTransponderData(dtvproperties, propertycount, original), transponderParameters(transponderparms), frequencyOffset(frequencyoffset)
+eDVBSatelliteTransponderData::eDVBSatelliteTransponderData(struct dtv_property *dtvproperties, unsigned int propertycount, eDVBFrontendParametersSatellite &transponderparms, int frequencyoffset, long spectinvcnt, bool original)
+: eDVBTransponderData(dtvproperties, propertycount, original), transponderParameters(transponderparms), frequencyOffset(frequencyoffset), spectinvCnt(spectinvcnt)
 {
 }
 
@@ -223,14 +224,15 @@ int eDVBSatelliteTransponderData::getInversion() const
 	}
 }
 
-unsigned int eDVBSatelliteTransponderData::getFrequency() const
+
+int eDVBSatelliteTransponderData::getFrequency() const
 {
 	if (originalValues) return transponderParameters.frequency;
 
-	return getProperty(DTV_FREQUENCY) + frequencyOffset;
+	return roundMulti((spectinvCnt&1) ? frequencyOffset - getProperty(DTV_FREQUENCY) : frequencyOffset + getProperty(DTV_FREQUENCY), 1000);
 }
 
-unsigned int eDVBSatelliteTransponderData::getSymbolRate() const
+int eDVBSatelliteTransponderData::getSymbolRate() const
 {
 	if (originalValues) return transponderParameters.symbol_rate;
 
@@ -273,6 +275,8 @@ int eDVBSatelliteTransponderData::getModulation() const
 	default: eDebug("got unsupported modulation from frontend! report as QPSK!");
 	case QPSK: return eDVBFrontendParametersSatellite::Modulation_QPSK;
 	case PSK_8: return eDVBFrontendParametersSatellite::Modulation_8PSK;
+	case APSK_16: return eDVBFrontendParametersSatellite::Modulation_16APSK;
+	case APSK_32: return eDVBFrontendParametersSatellite::Modulation_32APSK;
 	}
 }
 
@@ -345,14 +349,14 @@ int eDVBCableTransponderData::getInversion() const
 	}
 }
 
-unsigned int eDVBCableTransponderData::getFrequency() const
+int eDVBCableTransponderData::getFrequency() const
 {
 	if (originalValues) return transponderParameters.frequency;
 
 	return getProperty(DTV_FREQUENCY) / 1000;
 }
 
-unsigned int eDVBCableTransponderData::getSymbolRate() const
+int eDVBCableTransponderData::getSymbolRate() const
 {
 	if (originalValues) return transponderParameters.symbol_rate;
 
@@ -437,7 +441,7 @@ int eDVBTerrestrialTransponderData::getInversion() const
 	}
 }
 
-unsigned int eDVBTerrestrialTransponderData::getFrequency() const
+int eDVBTerrestrialTransponderData::getFrequency() const
 {
 	if (originalValues) return transponderParameters.frequency;
 
@@ -555,9 +559,9 @@ int eDVBTerrestrialTransponderData::getPlpId() const
 {
 	if (originalValues) return transponderParameters.plpid;
 
-#if DVB_API_VERSION > 5 || DVB_API_VERSION == 5 && DVB_API_VERSION_MINOR >= 9
+#if defined DTV_STREAM_ID
 	return getProperty(DTV_STREAM_ID);
-#elif DVB_API_VERSION == 5 && DVB_API_VERSION_MINOR >= 3
+#elif defined DTV_DVBT2_PLP_ID
 	return getProperty(DTV_DVBT2_PLP_ID);
 #else
 	return -1;
@@ -601,7 +605,7 @@ int eDVBATSCTransponderData::getInversion() const
 	}
 }
 
-unsigned int eDVBATSCTransponderData::getFrequency() const
+int eDVBATSCTransponderData::getFrequency() const
 {
 	if (originalValues) return transponderParameters.frequency;
 

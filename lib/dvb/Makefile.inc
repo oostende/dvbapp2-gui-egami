@@ -28,7 +28,12 @@ dvb_libenigma_dvb_a_SOURCES = \
 	dvb/tstools.cpp \
 	dvb/volume.cpp \
 	dvb/streamserver.cpp \
-	dvb/pmtparse.cpp
+	dvb/pmtparse.cpp \
+	dvb/encoder.cpp \
+	dvb/fbc.cpp
+if HAVE_AMLOGIC
+dvb_libenigma_dvb_a_SOURCES += dvb/amldecoder.cpp
+endif
 
 dvbincludedir = $(pkgincludedir)/lib/dvb
 dvbinclude_HEADERS = \
@@ -64,4 +69,9 @@ dvbinclude_HEADERS = \
 	dvb/tstools.h \
 	dvb/volume.h \
 	dvb/streamserver.h \
-	dvb/pmtparse.h
+	dvb/pmtparse.h \
+	dvb/encoder.h \
+	dvb/fbc.h
+if HAVE_AMLOGIC
+dvbinclude_HEADERS += dvb/amldecoder.h
+endif

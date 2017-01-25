@@ -12,6 +12,9 @@
 
 #include <linux/dvb/frontend.h>
 
+extern int roundMulti(int value, int m);//round value to multiple of m
+
+
 struct eDVBFrontendParametersSatellite
 {
 #ifndef SWIG
@@ -35,7 +38,7 @@ struct eDVBFrontendParametersSatellite
 	};
 
 	enum {
-		Modulation_Auto, Modulation_QPSK, Modulation_8PSK, Modulation_QAM16
+		Modulation_Auto, Modulation_QPSK, Modulation_8PSK, Modulation_QAM16, Modulation_16APSK, Modulation_32APSK
 	};
 
 	// dvb-s2
@@ -48,7 +51,7 @@ struct eDVBFrontendParametersSatellite
 	};
 
 	bool no_rotor_command_on_tune;
-	unsigned int frequency, symbol_rate;
+	int frequency, symbol_rate;
 	int polarisation, fec, inversion, orbital_position, system, modulation, rolloff, pilot;
 };
 SWIG_ALLOW_OUTPUT_SIMPLE(eDVBFrontendParametersSatellite);
@@ -67,7 +70,7 @@ struct eDVBFrontendParametersCable
 	 * The values are the same as those in eDVBFrontendParametersSatellite.
 	 */
 	enum {
-		FEC_Auto=0, FEC_1_2=1, FEC_2_3=2, FEC_3_4=3, FEC_5_6=4, FEC_7_8=5, FEC_8_9=6, FEC_3_5=7, FEC_4_5=8, FEC_9_10=9, FEC_None=15
+		FEC_Auto=0, FEC_1_2=1, FEC_2_3=2, FEC_3_4=3, FEC_5_6=4, FEC_7_8=5, FEC_8_9=6, FEC_3_5=7, FEC_4_5=8, FEC_9_10=9, FEC_6_7=10, FEC_None=15
 	};
 
 	enum {
@@ -78,7 +81,7 @@ struct eDVBFrontendParametersCable
 		Modulation_Auto, Modulation_QAM16, Modulation_QAM32, Modulation_QAM64, Modulation_QAM128, Modulation_QAM256
 	};
 
-	unsigned int frequency, symbol_rate;
+	int frequency, symbol_rate;
 	int modulation, inversion, fec_inner, system;
 };
 SWIG_ALLOW_OUTPUT_SIMPLE(eDVBFrontendParametersCable);
@@ -125,7 +128,7 @@ struct eDVBFrontendParametersTerrestrial
 		Inversion_Off, Inversion_On, Inversion_Unknown
 	};
 
-	unsigned int frequency;
+	int frequency;
 	int bandwidth;
 	int code_rate_HP, code_rate_LP;
 	int modulation;
@@ -152,7 +155,7 @@ struct eDVBFrontendParametersATSC
 		Modulation_Auto, Modulation_QAM16, Modulation_QAM32, Modulation_QAM64, Modulation_QAM128, Modulation_QAM256, Modulation_VSB_8, Modulation_VSB_16
 	};
 
-	unsigned int frequency;
+	int frequency;
 	int modulation, inversion, system;
 };
 SWIG_ALLOW_OUTPUT_SIMPLE(eDVBFrontendParametersATSC);
@@ -191,8 +194,8 @@ public:
 	eDVBTransponderData(struct dtv_property *dtvproperties, unsigned int propertycount, bool original);
 
 	int getInversion() const;
-	unsigned int getFrequency() const;
-	unsigned int getSymbolRate() const;
+	int getFrequency() const;
+	int getSymbolRate() const;
 	int getOrbitalPosition() const;
 	int getFecInner() const;
 	int getModulation() const;
@@ -216,14 +219,15 @@ class eDVBSatelliteTransponderData : public eDVBTransponderData
 
 	eDVBFrontendParametersSatellite transponderParameters;
 	int frequencyOffset;
+	long spectinvCnt;
 
 public:
-	eDVBSatelliteTransponderData(struct dtv_property *dtvproperties, unsigned int propertycount, eDVBFrontendParametersSatellite &transponderparms, int frequencyoffset, bool original);
+	eDVBSatelliteTransponderData(struct dtv_property *dtvproperties, unsigned int propertycount, eDVBFrontendParametersSatellite &transponderparms, int frequencyoffset, long spectinvcnt, bool original);
 
 	std::string getTunerType() const;
 	int getInversion() const;
-	unsigned int getFrequency() const;
-	unsigned int getSymbolRate() const;
+	int getFrequency() const;
+	int getSymbolRate() const;
 	int getOrbitalPosition() const;
 	int getFecInner() const;
 	int getModulation() const;
@@ -244,8 +248,8 @@ public:
 
 	std::string getTunerType() const;
 	int getInversion() const;
-	unsigned int getFrequency() const;
-	unsigned int getSymbolRate() const;
+	int getFrequency() const;
+	int getSymbolRate() const;
 	int getFecInner() const;
 	int getModulation() const;
 	int getSystem() const;
@@ -262,7 +266,7 @@ public:
 
 	std::string getTunerType() const;
 	int getInversion() const;
-	unsigned int getFrequency() const;
+	int getFrequency() const;
 	int getBandwidth() const;
 	int getCodeRateLp() const;
 	int getCodeRateHp() const;
@@ -285,7 +289,7 @@ public:
 
 	std::string getTunerType() const;
 	int getInversion() const;
-	unsigned int getFrequency() const;
+	int getFrequency() const;
 	int getModulation() const;
 	int getSystem() const;
 };
