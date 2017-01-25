@@ -68,6 +68,7 @@ is usually caused by not marking PSignals as immutable.
 #include <lib/gui/ewidgetanimation.h>
 #include <lib/gui/eslider.h>
 #include <lib/gui/epositiongauge.h>
+#include <lib/gui/egauge.h>
 #include <lib/gui/evideo.h>
 #include <lib/gui/ecanvas.h>
 #include <lib/python/connections.h>
@@ -76,7 +77,7 @@ is usually caused by not marking PSignals as immutable.
 #include <lib/gui/elistboxcontent.h>
 #include <lib/gui/esubtitle.h>
 #include <lib/service/listboxservice.h>
-#include <lib/nav/pcore.h>
+#include <lib/nav/core.h>
 #include <lib/actions/action.h>
 #include <lib/gdi/gfont.h>
 #include <lib/gdi/epng.h>
@@ -93,6 +94,8 @@ is usually caused by not marking PSignals as immutable.
 #include <lib/dvb/cahandler.h>
 #include <lib/dvb/fastscan.h>
 #include <lib/dvb/cablescan.h>
+#include <lib/dvb/encoder.h>
+#include <lib/dvb/streamserver.h>
 #include <lib/components/scan.h>
 #include <lib/components/file_eraser.h>
 #include <lib/components/tuxtxtapp.h>
@@ -194,6 +197,7 @@ typedef long time_t;
 %include <lib/gdi/fb.h>
 %include <lib/gdi/font.h>
 %include <lib/gdi/gpixmap.h>
+%include <lib/gdi/gfbdc.h>
 %include <lib/gdi/gmaindc.h>
 %include <lib/gdi/epoint.h>
 %include <lib/gdi/erect.h>
@@ -209,6 +213,7 @@ typedef long time_t;
 %include <lib/gui/ewindow.h>
 %include <lib/gui/eslider.h>
 %include <lib/gui/epositiongauge.h>
+%include <lib/gui/egauge.h>
 %include <lib/gui/ewidgetdesktop.h>
 %include <lib/gui/elistbox.h>
 %include <lib/gui/elistboxcontent.h>
@@ -218,7 +223,7 @@ typedef long time_t;
 %include <lib/gui/evideo.h>
 %include <lib/gui/esubtitle.h>
 %include <lib/service/listboxservice.h>
-%include <lib/nav/pcore.h>
+%include <lib/nav/core.h>
 %include <lib/actions/action.h>
 %include <lib/gdi/gfont.h>
 %include <lib/gdi/epng.h>
@@ -250,6 +255,7 @@ typedef long time_t;
 %include <lib/python/python.h>
 %include <lib/python/pythonconfig.h>
 %include <lib/gdi/picload.h>
+%include <lib/dvb/streamserver.h>
 /**************  eptr  **************/
 
 /**************  signals  **************/
@@ -395,6 +401,26 @@ void setEnableTtCachingOnOff(int onoff)
 }
 %}
 
+int getUsedEncoderCount();
+%{
+int getUsedEncoderCount()
+{
+	eEncoder *encoders = eEncoder::getInstance();
+	if (encoders) return encoders->getUsedEncoderCount();
+	return 0;
+}
+%}
+
+int getLinkedSlotID(int);
+%{
+int getLinkedSlotID(int fe)
+{
+        eFBCTunerManager *mgr = eFBCTunerManager::getInstance();
+        if (mgr) return mgr->getLinkedSlotID(fe);
+        return -1;
+}
+%}
+
 /************** temp *****************/
 
 	/* need a better place for this, i agree. */
@@ -405,7 +431,12 @@ extern eApplication *getApplication();
 extern int getPrevAsciiCode();
 extern void addFont(const char *filename, const char *alias, int scale_factor, int is_replacement, int renderflags = 0);
 extern const char *getEnigmaVersionString();
+extern const char *getGStreamerVersionString();
 extern void dump_malloc_stats(void);
+#ifndef HAVE_OSDANIMATION
+extern void setAnimation_current(int a);
+extern void setAnimation_speed(int speed);
+#endif
 %}
 
 extern void addFont(const char *filename, const char *alias, int scale_factor, int is_replacement, int renderflags = 0);
@@ -414,7 +445,12 @@ extern void runMainloop();
 extern void quitMainloop(int exit_code);
 extern eApplication *getApplication();
 extern const char *getEnigmaVersionString();
+extern const char *getGStreamerVersionString();
 extern void dump_malloc_stats(void);
+#ifndef HAVE_OSDANIMATION
+extern void setAnimation_current(int a);
+extern void setAnimation_speed(int speed);
+#endif
 
 %include <lib/python/python_console.i>
 %include <lib/python/python_base.i>
